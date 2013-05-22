@@ -75,14 +75,41 @@ static status_t vinfoToPixelFormat(const fb_var_screeninfo& vinfo,
             *bytespp = 3;
             break;
         case 32:
-            // TODO: do better decoding of vinfo here
-            *f = PIXEL_FORMAT_RGBX_8888;
+            if (vinfo.red.offset == 16) {
+                *f = PIXEL_FORMAT_BGRA_8888;
+            } else {
+                *f = PIXEL_FORMAT_RGBX_8888;
+            }
             *bytespp = 4;
             break;
         default:
             return BAD_VALUE;
     }
     return NO_ERROR;
+}
+
+char const*
+exchange_rb(char const* base, size_t size)
+{
+    char* mapbase;
+    char r, g, b, a;
+    int i;
+
+    mapbase = (char*)mmap(0, size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+    if (mapbase != MAP_FAILED) {
+        while (i < size) {
+            b = base[i];
+            g = base[i + 1];
+            r = base[i + 2];
+            a = base[i + 3];
+            mapbase[i] = r;
+            mapbase[i + 1] = g;
+            mapbase[i + 2] = b;
+            mapbase[i + 3] = a;
+            i += 4;
+        }
+    }
+    return mapbase;
 }
 
 int main(int argc, char** argv)
@@ -158,6 +185,10 @@ int main(int argc, char** argv)
     if (base) {
         if (png) {
             SkBitmap b;
+            if (f == PIXEL_FORMAT_BGRA_8888) {
+                base = (void const*)exchange_rb((char const*)base, size);
+                f = PIXEL_FORMAT_RGBX_8888;
+            }
             b.setConfig(flinger2skia(f), w, h);
             b.setPixels((void*)base);
             SkDynamicMemoryWStream stream;
